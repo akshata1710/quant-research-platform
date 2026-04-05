@@ -3,16 +3,23 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 import pandas as pd
+from backtesting.position_sizing import fixed_fractional, kelly_fraction, compute_win_stats
 
 COMMISSION = 0.001
 SLIPPAGE   = 0.0005
 
-def backtest(data: pd.DataFrame, cash: float = 10000.0, stop_loss: float = 0.05) -> dict:
-    position = 0
+def backtest(data: pd.DataFrame, cash: float = 10000.0,
+             stop_loss: float = 0.05,
+             trailing_stop: bool = True,
+             sizing: str = "fixed_fractional",
+             risk_pct: float = 0.02) -> dict:
+
+    position    = 0
     initial_cash = cash
     equity_curve = []
-    trades = []
-    entry_price = None
+    trades       = []
+    entry_price  = None
+    peak_price   = None
 
     data = data.copy()
     data["signal"] = data["signal"].shift(1).fillna(0)
@@ -24,33 +31,54 @@ def backtest(data: pd.DataFrame, cash: float = 10000.0, stop_loss: float = 0.05)
         buy_price  = price * (1 + SLIPPAGE)
         sell_price = price * (1 - SLIPPAGE)
 
+        # Trailing stop — tracks peak price since entry
         if position > 0 and entry_price is not None:
-            if price < entry_price * (1 - stop_loss):
+            if trailing_stop:
+                peak_price = max(peak_price or entry_price, price)
+                stop_price = peak_price * (1 - stop_loss)
+            else:
+                stop_price = entry_price * (1 - stop_loss)
+
+            if price < stop_price:
                 proceeds = sell_price * (1 - COMMISSION)
-                position -= 1
-                cash += proceeds
+                cash += proceeds * position
                 trades.append({"type": "stop_loss", "price": sell_price, "day": i})
+                position    = 0
                 entry_price = None
+                peak_price  = None
 
-        if signal == 1 and cash >= buy_price:
-            cost = buy_price * (1 + COMMISSION)
+        # Position sizing
+        if sizing == "kelly" and len(trades) >= 10:
+            stats    = compute_win_stats(trades)
+            fraction = kelly_fraction(stats["win_rate"], stats["avg_win"], stats["avg_loss"])
+            shares   = max(int((cash * fraction) / buy_price), 1)
+        else:
+            shares = fixed_fractional(cash, buy_price, risk_pct)
+            shares = max(shares, 1)
+
+        # Buy
+        if signal == 1 and position == 0:
+            cost = buy_price * shares * (1 + COMMISSION)
             if cash >= cost:
-                position += 1
-                cash -= cost
-                entry_price = buy_price
-                trades.append({"type": "buy", "price": buy_price, "day": i})
+                position    += shares
+                cash        -= cost
+                entry_price  = buy_price
+                peak_price   = buy_price
+                trades.append({"type": "buy", "price": buy_price, "day": i, "shares": shares})
 
+        # Sell
         elif signal == -1 and position > 0:
-            proceeds = sell_price * (1 - COMMISSION)
-            position -= 1
-            cash += proceeds
+            proceeds = sell_price * position * (1 - COMMISSION)
+            cash        += proceeds
+            trades.append({"type": "sell", "price": sell_price, "day": i, "shares": position})
+            position    = 0
             entry_price = None
-            trades.append({"type": "sell", "price": sell_price, "day": i})
+            peak_price  = None
 
         equity_curve.append(cash + position * price)
 
-    final_value = equity_curve[-1]
-    stop_loss_hits = len([t for t in trades if t["type"] == "stop_loss"])
+    final_value      = equity_curve[-1]
+    stop_loss_hits   = len([t for t in trades if t["type"] == "stop_loss"])
 
     return {
         "initial_value":  initial_cash,
@@ -64,15 +92,16 @@ def backtest(data: pd.DataFrame, cash: float = 10000.0, stop_loss: float = 0.05)
 
 if __name__ == "__main__":
     from ingestion.fetch_market_data import load
-    from strategies.mean_reversion import MeanReversion
+    from strategies.momentum import Momentum
 
     df = load("AAPL")
-    df = MeanReversion(window=20).generate_signals(df)
+    df = Momentum(window=20).generate_signals(df)
     df = df.dropna()
 
-    result = backtest(df)
-    print(f"Initial:        ${result['initial_value']:,.2f}")
-    print(f"Final:          ${result['final_value']:,.2f}")
-    print(f"Return:         {result['return_pct']}%")
-    print(f"Total trades:   {result['total_trades']}")
-    print(f"Stop loss hits: {result['stop_loss_hits']}")
+    print("--- Fixed fractional sizing ---")
+    r1 = backtest(df, sizing="fixed_fractional", trailing_stop=False)
+    print(f"Return: {r1['return_pct']}%  |  Trades: {r1['total_trades']}  |  Stop losses: {r1['stop_loss_hits']}")
+
+    print("\n--- Kelly sizing + trailing stop ---")
+    r2 = backtest(df, sizing="kelly", trailing_stop=True)
+    print(f"Return: {r2['return_pct']}%  |  Trades: {r2['total_trades']}  |  Stop losses: {r2['stop_loss_hits']}")

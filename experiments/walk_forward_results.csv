@@ -1,0 +1,13 @@
+ticker,strategy,avg_return,avg_sharpe,avg_drawdown
+AAPL,mean_reversion,-0.07,0.137,-0.3
+AAPL,momentum,0.04,0.222,-0.35
+AAPL,rsi,0.01,0.077,-0.13
+AAPL,bollinger_bands,0.04,-0.097,-0.17
+MSFT,mean_reversion,0.19,1.025,-0.26
+MSFT,momentum,0.08,-0.172,-0.53
+MSFT,rsi,0.05,0.15,-0.23
+MSFT,bollinger_bands,-0.02,-0.062,-0.06
+SPY,mean_reversion,-0.08,0.216,-0.38
+SPY,momentum,0.08,0.401,-0.34
+SPY,rsi,-0.06,-0.078,-0.2
+SPY,bollinger_bands,0.3,1.082,-0.37

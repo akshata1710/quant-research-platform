@@ -1,0 +1,13 @@
+strategy,window,total_return,sharpe_ratio,max_drawdown,final_value
+mean_reversion,10,0.26,0.134,-0.51,100263.63
+mean_reversion,20,0.3,0.145,-0.56,100296.66
+mean_reversion,30,0.58,0.281,-0.53,100575.45
+momentum,10,1.11,0.709,-0.46,101113.49
+momentum,20,1.19,0.701,-0.51,101187.26
+momentum,30,1.1,0.66,-0.57,101096.18
+rsi,10,0.36,0.25,-0.32,100355.01
+rsi,20,0.27,0.344,-0.28,100274.38
+rsi,30,0.08,0.18,-0.08,100078.43
+bollinger_bands,10,0.34,0.266,-0.57,100339.2
+bollinger_bands,20,0.58,0.385,-0.71,100579.96
+bollinger_bands,30,0.42,0.301,-0.75,100420.26
